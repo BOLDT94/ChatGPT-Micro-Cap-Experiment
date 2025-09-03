@@ -1,4 +1,5 @@
 name: Fetch Daily Prices
+
 on:
   schedule:
     - cron: "30 20 * * 1-5"   # 20:30 UTC ≈ 22:30 Stockholm (sommar), ~21:30 (vinter)
@@ -7,21 +8,49 @@ on:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"   # så prints syns direkt i loggen
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pandas yfinance
-- name: Install deps
-  run: |
-    python -V
-    pip install --upgrade "yfinance>=0.2.40" pandas
 
-      - name: Run fetch
+      - name: Show Python version
+        run: python -V
+
+      - name: Install dependencies
+        run: pip install --upgrade "yfinance>=0.2.40" pandas
+
+      - name: DEBUG – show repo tree
+        run: |
+          pwd
+          ls -la
+          echo "--- .github/workflows ---"
+          ls -la .github/workflows || true
+          echo "--- scripts ---"
+          ls -la scripts || true
+          echo "--- holdings ---"
+          ls -la holdings || true
+
+      - name: DEBUG – show watchlist head
+        run: sed -n '1,20p' holdings/watchlist.csv || true
+
+      - name: DEBUG – show fetch script head
+        run: sed -n '1,40p' scripts/fetch_prices.py
+
+      - name: Run fetch script
         run: python scripts/fetch_prices.py
+
+      - name: DEBUG – list data/daily after run
+        run: ls -la data/daily || true
+
       - name: Commit CSV
         run: |
           git config user.name "github-actions"
