@@ -1,0 +1,12 @@
+ticker,close,asof_date,currency,close_sek,source
+INTRUM.ST,,2025-09-03,SEK,,yfinance
+EMBRAC-B.ST,,2025-09-03,SEK,,yfinance
+GOMX.ST,,2025-09-03,SEK,,yfinance
+PDX.ST,,2025-09-03,SEK,,yfinance
+HEXA-B.ST,,2025-09-03,SEK,,yfinance
+TRUE-B.ST,,2025-09-03,SEK,,yfinance
+SBB-B.ST,,2025-09-03,SEK,,yfinance
+HUBS.ST,,2025-09-03,SEK,,yfinance
+GATE.ST,,2025-09-03,SEK,,yfinance
+F2M.ST,,2025-09-03,SEK,,yfinance
+ACWI,,2025-09-03,USD,,yfinance
