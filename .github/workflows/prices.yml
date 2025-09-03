@@ -15,6 +15,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pandas yfinance
+      - run: pip install --upgrade "yfinance>=0.2.40" pandas
       - name: Run fetch
         run: python scripts/fetch_prices.py
       - name: Commit CSV
