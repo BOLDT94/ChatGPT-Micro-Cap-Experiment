@@ -1,0 +1,26 @@
+name: Fetch Daily Prices
+on:
+  schedule:
+    - cron: "30 20 * * 1-5"   # 20:30 UTC ≈ 22:30 Stockholm (sommar), ~21:30 (vinter)
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pandas yfinance
+      - name: Run fetch
+        run: python scripts/fetch_prices.py
+      - name: Commit CSV
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/daily/*.csv
+          git commit -m "Daily prices" || echo "No changes"
+          git push
