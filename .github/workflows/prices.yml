@@ -2,16 +2,16 @@ name: Fetch Daily Prices
 
 on:
   schedule:
-    - cron: "30 20 * * 1-5"   # 20:30 UTC ≈ 22:30 Stockholm (sommar), ~21:30 (vinter)
+    - cron: "10 16 * * 1-5"   # 16:10 UTC ≈ 18:10 Stockholm (sommar), ~17:10 (vinter)
   workflow_dispatch:
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    env:
-      PYTHONUNBUFFERED: "1"   # så prints syns direkt i loggen
     permissions:
       contents: write
+    env:
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Check out repo
@@ -22,34 +22,25 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Show Python version
-        run: python -V
+      - name: Install deps
+        run: pip install --upgrade "yfinance>=0.2.40" "pandas>=2.0.0" requests
 
-      - name: Install dependencies
-        run: pip install --upgrade "yfinance>=0.2.40" pandas
-
-      - name: DEBUG – show repo tree
+      - name: DEBUG – show files
         run: |
-          pwd
           ls -la
-          echo "--- .github/workflows ---"
-          ls -la .github/workflows || true
-          echo "--- scripts ---"
-          ls -la scripts || true
-          echo "--- holdings ---"
-          ls -la holdings || true
-
-      - name: DEBUG – show watchlist head
-        run: sed -n '1,20p' holdings/watchlist.csv || true
-
-      - name: DEBUG – show fetch script head
-        run: sed -n '1,40p' scripts/fetch_prices.py
+          ls -la scripts
+          sed -n '1,60p' scripts/fetch_prices.py
+          sed -n '1,20p' holdings/watchlist.csv
 
       - name: Run fetch script
         run: python scripts/fetch_prices.py
 
-      - name: DEBUG – list data/daily after run
-        run: ls -la data/daily || true
+      - name: Show output
+        run: |
+          echo "Contents of data/daily:"
+          ls -la data/daily
+          echo "Tail of latest file:"
+          tail -n +1 data/daily/prices_raw_*.csv | head -n 50
 
       - name: Commit CSV
         run: |
