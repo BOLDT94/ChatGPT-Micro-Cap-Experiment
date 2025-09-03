@@ -17,14 +17,13 @@ if "ticker" not in wl.columns:
     print("ERROR: 'ticker' kolumn saknas i watchlist.csv"); sys.exit(0)
 
 tickers = [t for t in wl["ticker"].dropna().unique().tolist() if isinstance(t, str) and t.strip()]
-rows = []
+rows, fails = [], []
 
 def pick_close(df):
     """Returnera (close_value, date) eller None om det inte går."""
     if df is None or df.empty:
         return None
     df = df.sort_index()
-    # yfinance kan returnera 'Close' eller 'Adj Close' beroende på auto_adjust
     col = "Close" if "Close" in df.columns else ("Adj Close" if "Adj Close" in df.columns else None)
     if col is None:
         return None
@@ -36,7 +35,6 @@ def pick_close(df):
 
 for t in tickers:
     try:
-        # Sätt auto_adjust explicit så vi vet vad vi får.
         hist = yf.download(t, period="10d", interval="1d", progress=False, auto_adjust=False)
         lc = pick_close(hist)
         if lc:
@@ -44,10 +42,15 @@ for t in tickers:
             rows.append({"ticker": t, "close": px, "asof_date": d.isoformat()})
         else:
             print("VARNING: ingen close-data för", t)
+            fails.append(t)
     except Exception as e:
         print("Misslyckades:", t, e)
+        fails.append(t)
 
-# Bygg df – även om allt misslyckade skapar vi ett tomt skelett med tickers
+# Debug: summering av utfall
+print(f"DEBUG: {len(rows)} tickers lyckades, {len(fails)} tickers misslyckades")
+
+# Bygg df – även om allt misslyckade skapar vi ett tomt skelett
 if rows:
     df = pd.DataFrame(rows)
 else:
@@ -75,7 +78,7 @@ def to_sek(px, ccy):
         return None
     if ccy == "USD" and usdsek: return px * usdsek
     if ccy == "EUR" and eursek: return px * eursek
-    return px  # anta SEK annars
+    return px
 
 df["close_sek"] = [to_sek(px, c) for px, c in zip(df["close"], df["currency"])]
 df["source"] = "yfinance"
