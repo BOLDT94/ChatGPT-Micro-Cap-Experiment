@@ -1,95 +1,145 @@
 import os
 import sys
+import io
 import datetime as dt
+from typing import Optional, Tuple, List
+
 import pandas as pd
+import requests
 import yfinance as yf
 
 WATCH = "holdings/watchlist.csv"
 OUTDIR = "data/daily"
 os.makedirs(OUTDIR, exist_ok=True)
 
-today = dt.date.today()
-outpath = f"{OUTDIR}/prices_raw_{today.strftime('%Y%m%d')}.csv"
+TODAY = dt.date.today()
+OUTPATH = f"{OUTDIR}/prices_raw_{TODAY.strftime('%Y%m%d')}.csv"
 
-# --- Helpers -----------------------------------------------------------------
+# --------------------- Helpers ---------------------
 
-def pick_close(df):
-    """Return (close_value, date) from a yfinance DataFrame or None if unavailable."""
-    if df is None or df.empty:
+def to_stooq_symbol(yahoo_symbol: str) -> Optional[str]:
+    """
+    Konvertera Yahoo (.ST) till Stooq (.ST -> .st, bindestreck små bokstäver).
+    Ex: 'EMBRAC-B.ST' -> 'embrac-b.st', 'INTRUM.ST' -> 'intrum.st'
+    Återvänder None om symbolen inte ser svensk ut.
+    """
+    if not isinstance(yahoo_symbol, str):
         return None
-    df = df.sort_index()
-    col = "Close" if "Close" in df.columns else ("Adj Close" if "Adj Close" in df.columns else None)
-    if col is None:
-        return None
-    clean = df.dropna(subset=[col])
-    if clean.empty:
-        return None
-    last = clean.tail(1)
-    return float(last[col].iloc[0]), last.index[-1].date()
-
-def fetch_last_close(symbol, periods=("10d", "1mo", "2mo")):
-    """Try multiple periods until a last close is found."""
-    for per in periods:
-        try:
-            hist = yf.download(symbol, period=per, interval="1d", progress=False, auto_adjust=False)
-            got = pick_close(hist)
-            if got:
-                return got
-        except Exception as e:
-            print(f"VARNING: nedladdning misslyckades för {symbol} ({per}): {e}")
+    s = yahoo_symbol.strip()
+    if s.endswith(".ST"):
+        base = s[:-3]
+        return base.lower() + ".st"
+    # Utländska ETF:er etc (ACWI) lämnas
     return None
 
-# --- Read watchlist ----------------------------------------------------------
+def stooq_last_close(symbol: str) -> Optional[Tuple[float, dt.date]]:
+    """
+    Hämta sista giltiga close från Stooq historik-CSV.
+    Endpoint-format: https://stooq.com/q/d/l/?s=<symbol>&i=d
+    Returnerar (pris, datum) eller None.
+    """
+    url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+    try:
+        r = requests.get(url, timeout=20)
+        if r.status_code != 200 or len(r.text) < 10:
+            return None
+        df = pd.read_csv(io.StringIO(r.text))
+        # Stooq kolumner: Date,Open,High,Low,Close,Volume
+        if "Close" not in df.columns or "Date" not in df.columns or df.empty:
+            return None
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date", "Close"])
+        if df.empty:
+            return None
+        last = df.iloc[-1]
+        return float(last["Close"]), last["Date"].date()
+    except Exception:
+        return None
 
+def yahoo_last_close(symbol: str, periods: List[str] = ["10d","1mo","6mo"]) -> Optional[Tuple[float, dt.date]]:
+    """
+    Hämtar sista giltiga Close (eller Adj Close) via yfinance, med fallback-perioder.
+    """
+    def pick_close(df: pd.DataFrame) -> Optional[Tuple[float, dt.date]]:
+        if df is None or df.empty:
+            return None
+        df = df.sort_index()
+        col = "Close" if "Close" in df.columns else ("Adj Close" if "Adj Close" in df.columns else None)
+        if col is None:
+            return None
+        s = df[col].dropna()
+        if s.empty:
+            return None
+        return float(s.iloc[-1]), s.index[-1].date()
+
+    for per in periods:
+        try:
+            h = yf.download(symbol, period=per, interval="1d", auto_adjust=False, progress=False)
+            got = pick_close(h)
+            if got:
+                return got
+        except Exception:
+            pass
+    return None
+
+def fx_yahoo(symbol: str) -> Optional[float]:
+    """
+    Hämtar sista giltiga Close för FX via yfinance (SEK=X, EURSEK=X).
+    """
+    got = yahoo_last_close(symbol, periods=["10d","1mo","6mo"])
+    return got[0] if got else None
+
+# --------------------- Körning ---------------------
+
+# Läs watchlist
 try:
     wl = pd.read_csv(WATCH)
 except Exception as e:
-    print("ERROR: kunde inte läsa", WATCH, e)
-    sys.exit(0)
+    print("ERROR: kunde inte läsa", WATCH, e); sys.exit(0)
 
 if "ticker" not in wl.columns:
-    print("ERROR: 'ticker' kolumn saknas i watchlist.csv")
-    sys.exit(0)
+    print("ERROR: 'ticker' kolumn saknas i watchlist.csv"); sys.exit(0)
 
-wl["currency"] = wl.get("currency", pd.Series(["SEK"] * len(wl))).fillna("SEK")
+wl["currency"] = wl.get("currency", pd.Series(["SEK"]*len(wl))).fillna("SEK")
 
 tickers = [t for t in wl["ticker"].dropna().astype(str).str.strip().tolist() if t]
-rows, fails = [], []
+rows, stooq_hits, yahoo_hits, fails = [], 0, 0, 0
 
-# --- Fetch equities ----------------------------------------------------------
+for ysym in tickers:
+    price, asof = None, None
 
-for t in tickers:
-    got = fetch_last_close(t)
-    if got:
-        px, d = got
-        rows.append({"ticker": t, "close": px, "asof_date": d.isoformat()})
-    else:
-        print("VARNING: ingen close-data för", t)
-        fails.append(t)
+    # 1) Försök Stooq
+    stsym = to_stooq_symbol(ysym)
+    if stsym:
+        got = stooq_last_close(stsym)
+        if got:
+            price, asof = got
+            stooq_hits += 1
 
-print(f"DEBUG: {len(rows)} tickers lyckades, {len(fails)} tickers misslyckades")
-if fails:
-    print("DEBUG – misslyckade tickers:", ", ".join(fails))
+    # 2) Fallback – Yahoo
+    if price is None:
+        got = yahoo_last_close(ysym)
+        if got:
+            price, asof = got
+            yahoo_hits += 1
+        else:
+            fails += 1
+            print(f"VARNING: ingen close-data för {ysym} (Stooq+Yahoo)")
 
-# Bygg df – även om allt fallerade skapar vi ett skelett-df så merge inte kraschar
-if rows:
-    df = pd.DataFrame(rows)
-else:
-    df = pd.DataFrame(
-        {"ticker": tickers, "close": [pd.NA] * len(tickers), "asof_date": [today.isoformat()] * len(tickers)}
-    )
+    rows.append({"ticker": ysym, "close": price, "asof_date": (asof.isoformat() if asof else None)})
 
-# --- FX (USD/SEK & EUR/SEK) --------------------------------------------------
+print(f"DEBUG: Stooq OK={stooq_hits}, Yahoo OK={yahoo_hits}, Fails={fails}")
 
-usdsek_close = fetch_last_close("SEK=X")   # USD/SEK
-usdsek = usdsek_close[0] if usdsek_close else None
+# DataFrame även om allt misslyckas
+df = pd.DataFrame(rows)
 
-eursek_close = fetch_last_close("EURSEK=X")
-eursek = eursek_close[0] if eursek_close else None
+# FX via Yahoo (stabilt för valutapar)
+usdsek = fx_yahoo("SEK=X")      # USD/SEK
+eursek = fx_yahoo("EURSEK=X")   # EUR/SEK
+print(f"DEBUG FX: USD/SEK={usdsek}, EUR/SEK={eursek}")
 
-# --- Merge currency & convert to SEK -----------------------------------------
-
-df = df.merge(wl[["ticker", "currency"]], on="ticker", how="left")
+# Merge valuta och SEK-konvertera
+df = df.merge(wl[["ticker","currency"]], on="ticker", how="left")
 
 def to_sek(px, ccy):
     if pd.isna(px):
@@ -98,13 +148,11 @@ def to_sek(px, ccy):
         return px * usdsek
     if ccy == "EUR" and eursek:
         return px * eursek
-    # SEK eller okänd -> lämna som är
-    return px
+    return px  # SEK eller okänt
 
 df["close_sek"] = [to_sek(px, c) for px, c in zip(df["close"], df["currency"])]
-df["source"] = "yfinance"
+df["source"] = ["stooq" if (to_stooq_symbol(t) and not pd.isna(px)) else ("yfinance" if not pd.isna(px) else "none")
+                for t, px in zip(df["ticker"], df["close"])]
 
-# --- Write -------------------------------------------------------------------
-
-df.to_csv(outpath, index=False, encoding="utf-8")
-print("OK:", outpath, "rader:", len(df))
+df.to_csv(OUTPATH, index=False, encoding="utf-8")
+print("OK:", OUTPATH, "rader:", len(df))
