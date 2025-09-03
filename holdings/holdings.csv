@@ -1,5 +1,5 @@
 [Holdings]
-Ticker   Antal   Inköpskurs   Stop-loss   Marknadsvärde
+Ticker,Antal,Inköpskurs,Stop-loss,Marknadsvärde
 
 [Cash]
 5000 SEK
