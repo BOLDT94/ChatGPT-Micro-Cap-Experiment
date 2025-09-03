@@ -1,3 +1,5 @@
-Ticker,Antal,Inköpskurs,Stop-loss,TradeVolym,Marknadsvärde
-VOLV-B.ST,10,250,220,2500,
-ERIC-B.ST,20,65,58,1300,
+[Holdings]
+Ticker   Antal   Inköpskurs   Stop-loss   Marknadsvärde
+
+[Cash]
+5000 SEK
