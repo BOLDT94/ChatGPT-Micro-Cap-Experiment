@@ -1,5 +1,12 @@
 ticker,currency,notes
-VOLV-B.ST,SEK,Volvo B
-ERIC-B.ST,SEK,Ericsson B
-SAND.ST,SEK,Sandvik
+INTRUM.ST,SEK,"Intrum â€“ VD-byte rapporterat, nyhetsmomentum"
+EMBRAC-B.ST,SEK,"Embracer â€“ tydlig teknikâ€‘exponering, hÃ¶g volym"
+GOMX.ST,SEK,"GomSpace â€“ lÃ¥gmktâ€‘cap i elektroniksektor, aktiv handel"
+PDX.ST,SEK,"Paradox Interactive â€“ gaming, fÃ¶rhÃ¶jd aktivitet, mid cap"
+HEXA-B.ST,SEK,"Hexagon â€“ stabil tech, motsvarande indexexponering"
+TRUE-B.ST,SEK,"Truecaller â€“ tech/tjÃ¤nster, aktiv handel"
+SBB-B.ST,SEK,"Samhallsbyggnadsbolaget B â€“ finansfastigheter, volym"
+HUBS.ST,SEK,"Hubbster â€“ lÃ¥g cap, tech sektor potential"
+GATE.ST,SEK,"Jumpgate â€“ techâ€‘tjÃ¤nster, microâ€‘segment"
+F2M.ST,SEK,"Free2move Holding â€“ tech, aktiv handel"
 ACWI,USD,Benchmark ACWI
