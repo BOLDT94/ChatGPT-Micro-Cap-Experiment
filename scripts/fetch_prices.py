@@ -35,6 +35,7 @@ def pick_close(df):
 
 for t in tickers:
     try:
+        # explicit så vi får 'Close' och slipper FutureWarning
         hist = yf.download(t, period="10d", interval="1d", progress=False, auto_adjust=False)
         lc = pick_close(hist)
         if lc:
@@ -47,15 +48,21 @@ for t in tickers:
         print("Misslyckades:", t, e)
         fails.append(t)
 
-# Debug: summering av utfall
+# Debug-summering
 print(f"DEBUG: {len(rows)} tickers lyckades, {len(fails)} tickers misslyckades")
+if fails:
+    print("DEBUG – misslyckade tickers:", ", ".join(fails))
 
-# Bygg df – även om allt misslyckade skapar vi ett tomt skelett
+# Även om allt fallerar, skapa ett skelett-df så merge inte kraschar
 if rows:
     df = pd.DataFrame(rows)
 else:
     print("VARNING: inga rader hämtades – skapar tomt df med tickers från watchlist.")
-    df = pd.DataFrame({"ticker": tickers, "close": [pd.NA]*len(tickers), "asof_date": [today.isoformat()]*len(tickers)})
+    df = pd.DataFrame({
+        "ticker": tickers,
+        "close": [pd.NA]*len(tickers),
+        "asof_date": [today.isoformat()]*len(tickers)
+    })
 
 def safe_fx(symbol):
     try:
@@ -78,7 +85,7 @@ def to_sek(px, ccy):
         return None
     if ccy == "USD" and usdsek: return px * usdsek
     if ccy == "EUR" and eursek: return px * eursek
-    return px
+    return px  # anta SEK annars
 
 df["close_sek"] = [to_sek(px, c) for px, c in zip(df["close"], df["currency"])]
 df["source"] = "yfinance"
