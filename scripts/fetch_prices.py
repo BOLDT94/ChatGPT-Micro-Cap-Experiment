@@ -1,4 +1,8 @@
-import pandas as pd, yfinance as yf, datetime as dt, os, sys
+import os
+import sys
+import datetime as dt
+import pandas as pd
+import yfinance as yf
 
 WATCH = "holdings/watchlist.csv"
 OUTDIR = "data/daily"
@@ -7,20 +11,10 @@ os.makedirs(OUTDIR, exist_ok=True)
 today = dt.date.today()
 outpath = f"{OUTDIR}/prices_raw_{today.strftime('%Y%m%d')}.csv"
 
-# Läs watchlist
-try:
-    wl = pd.read_csv(WATCH)
-except Exception as e:
-    print("ERROR: kunde inte läsa", WATCH, e); sys.exit(0)
-
-if "ticker" not in wl.columns:
-    print("ERROR: 'ticker' kolumn saknas i watchlist.csv"); sys.exit(0)
-
-tickers = [t for t in wl["ticker"].dropna().unique().tolist() if isinstance(t, str) and t.strip()]
-rows, fails = [], []
+# --- Helpers -----------------------------------------------------------------
 
 def pick_close(df):
-    """Returnera (close_value, date) eller None om det inte går."""
+    """Return (close_value, date) from a yfinance DataFrame or None if unavailable."""
     if df is None or df.empty:
         return None
     df = df.sort_index()
@@ -33,61 +27,84 @@ def pick_close(df):
     last = clean.tail(1)
     return float(last[col].iloc[0]), last.index[-1].date()
 
+def fetch_last_close(symbol, periods=("10d", "1mo", "2mo")):
+    """Try multiple periods until a last close is found."""
+    for per in periods:
+        try:
+            hist = yf.download(symbol, period=per, interval="1d", progress=False, auto_adjust=False)
+            got = pick_close(hist)
+            if got:
+                return got
+        except Exception as e:
+            print(f"VARNING: nedladdning misslyckades för {symbol} ({per}): {e}")
+    return None
+
+# --- Read watchlist ----------------------------------------------------------
+
+try:
+    wl = pd.read_csv(WATCH)
+except Exception as e:
+    print("ERROR: kunde inte läsa", WATCH, e)
+    sys.exit(0)
+
+if "ticker" not in wl.columns:
+    print("ERROR: 'ticker' kolumn saknas i watchlist.csv")
+    sys.exit(0)
+
+wl["currency"] = wl.get("currency", pd.Series(["SEK"] * len(wl))).fillna("SEK")
+
+tickers = [t for t in wl["ticker"].dropna().astype(str).str.strip().tolist() if t]
+rows, fails = [], []
+
+# --- Fetch equities ----------------------------------------------------------
+
 for t in tickers:
-    try:
-        # explicit så vi får 'Close' och slipper FutureWarning
-        hist = yf.download(t, period="10d", interval="1d", progress=False, auto_adjust=False)
-        lc = pick_close(hist)
-        if lc:
-            px, d = lc
-            rows.append({"ticker": t, "close": px, "asof_date": d.isoformat()})
-        else:
-            print("VARNING: ingen close-data för", t)
-            fails.append(t)
-    except Exception as e:
-        print("Misslyckades:", t, e)
+    got = fetch_last_close(t)
+    if got:
+        px, d = got
+        rows.append({"ticker": t, "close": px, "asof_date": d.isoformat()})
+    else:
+        print("VARNING: ingen close-data för", t)
         fails.append(t)
 
-# Debug-summering
 print(f"DEBUG: {len(rows)} tickers lyckades, {len(fails)} tickers misslyckades")
 if fails:
     print("DEBUG – misslyckade tickers:", ", ".join(fails))
 
-# Även om allt fallerar, skapa ett skelett-df så merge inte kraschar
+# Bygg df – även om allt fallerade skapar vi ett skelett-df så merge inte kraschar
 if rows:
     df = pd.DataFrame(rows)
 else:
-    print("VARNING: inga rader hämtades – skapar tomt df med tickers från watchlist.")
-    df = pd.DataFrame({
-        "ticker": tickers,
-        "close": [pd.NA]*len(tickers),
-        "asof_date": [today.isoformat()]*len(tickers)
-    })
+    df = pd.DataFrame(
+        {"ticker": tickers, "close": [pd.NA] * len(tickers), "asof_date": [today.isoformat()] * len(tickers)}
+    )
 
-def safe_fx(symbol):
-    try:
-        h = yf.download(symbol, period="10d", interval="1d", progress=False, auto_adjust=False)
-        got = pick_close(h)
-        return got[0] if got else None
-    except Exception:
-        return None
+# --- FX (USD/SEK & EUR/SEK) --------------------------------------------------
 
-usdsek = safe_fx("SEK=X")       # USD/SEK
-eursek = safe_fx("EURSEK=X")    # EUR/SEK
+usdsek_close = fetch_last_close("SEK=X")   # USD/SEK
+usdsek = usdsek_close[0] if usdsek_close else None
 
-# Mappa valuta
-cur = wl[["ticker","currency"]].copy()
-cur["currency"] = cur["currency"].fillna("SEK")
-df = df.merge(cur, on="ticker", how="left")
+eursek_close = fetch_last_close("EURSEK=X")
+eursek = eursek_close[0] if eursek_close else None
+
+# --- Merge currency & convert to SEK -----------------------------------------
+
+df = df.merge(wl[["ticker", "currency"]], on="ticker", how="left")
 
 def to_sek(px, ccy):
-    if px is None or (isinstance(px, float) and pd.isna(px)) or px == pd.NA:
+    if pd.isna(px):
         return None
-    if ccy == "USD" and usdsek: return px * usdsek
-    if ccy == "EUR" and eursek: return px * eursek
-    return px  # anta SEK annars
+    if ccy == "USD" and usdsek:
+        return px * usdsek
+    if ccy == "EUR" and eursek:
+        return px * eursek
+    # SEK eller okänd -> lämna som är
+    return px
 
 df["close_sek"] = [to_sek(px, c) for px, c in zip(df["close"], df["currency"])]
 df["source"] = "yfinance"
+
+# --- Write -------------------------------------------------------------------
+
 df.to_csv(outpath, index=False, encoding="utf-8")
 print("OK:", outpath, "rader:", len(df))
