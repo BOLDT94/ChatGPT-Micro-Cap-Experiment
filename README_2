@@ -1,0 +1,18 @@
+# AI Portfölj 1 – Semi-automatiserad pipeline (BOLDT94)
+
+[![Fetch Daily Prices](https://github.com/BOLDT94/ChatGPT-Micro-Cap-Experiment/actions/workflows/prices.yml/badge.svg)](https://github.com/BOLDT94/ChatGPT-Micro-Cap-Experiment/actions/workflows/prices.yml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BOLDT94/ChatGPT-Micro-Cap-Experiment/blob/main/notebooks/AI_Portfolj1.ipynb)
+
+**Översikt**
+- GitHub Actions hämtar dagliga priser till `data/daily/prices_raw_YYYYMMDD.csv`.
+- Google Colab-notebook läser holdings från Google Drive, injicerar `CASH`, mergar mot prisfilen, skriver EOD-logg och ritar graf (inkl. stop-loss-markeringar).
+
+## Snabbstart (Colab)
+1. Öppna notebooken via knappen ovan.
+2. Säkerställ att du har i Drive:
+   - `MyDrive/AI-portfölj_v.1.0/Holdings/holdings.csv` (format nedan)
+   - `MyDrive/AI-portfölj_v.1.0/EOD_log/` (skapas automatiskt)
+3. Format på `holdings.csv`:
+   ```csv
+   Ticker,Antal,Inköpskurs,Stop-loss
+   CASH,5000,1.0,
