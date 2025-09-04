@@ -1,0 +1,46 @@
+
+---
+
+# 9) Notebook i repo (lägg in filen)
+**Placering:** `/notebooks/AI_Portfolj1.ipynb`  
+**Hur:** I Colab: *File → Save a copy in GitHub* → välj din repo och path `notebooks/AI_Portfolj1.ipynb`.  
+(Om du vill kan jag senare ge en färdig minimal `.ipynb`, men du har i praktiken redan byggt den i Colab.)
+
+---
+
+# 10) Tävlingsregler (ny fil)
+**Fil:** `/docs/rules.md` (ny fil)
+
+```markdown
+# Tävlingsregler – AI Portfölj 1
+
+**Startkapital:** 5 000 SEK (modellieras som `CASH` i holdings).  
+**Valuta:** SEK (alla priser normaliseras till SEK).  
+**Tidszon:** Europe/Stockholm.  
+**Uppdateringsfrekvens:** Dagligen efter stängning (GitHub Actions + Colab).
+
+## Datakällor
+- Dagliga prisfiler från workflow: `data/daily/prices_raw_YYYYMMDD.csv`.
+- Notebooken konverterar till SEK om nödvändigt.
+
+## Stop-loss
+- Stöd för absolut nivå (t.ex. `75`) eller procent (t.ex. `15%`) i kolumnen `Stop-loss`.
+- `CASH` triggar aldrig stop-loss.
+
+## EOD-logg
+- `EOD_log/eod_log.csv` fält:
+  - `date`, `day_tag`, `portfolio_name`, `cash_SEK`, `total_value_SEK`, `notes`
+  - (utökning) `benchmark_SEK`, `return_total_pct`, `return_vs_bm_pct`
+- Dagens rad ersätts om den redan finns.
+
+## Benchmark
+- Standard: `ACWI` (i USD i källan) konverteras till SEK.
+- Avkastning beräknas mot första `total_value_SEK` som baseline.
+
+## Handel & logg
+- Affärer förs manuellt i mäklare.
+- `holdings.csv` uppdateras manuellt i Drive.
+- (Valfritt) `Trades/trades.csv` kan föras för köp/sälj-historik.
+
+## Målsättning
+- Semi-automatiserad process för datainsamling, EOD, och uppföljning.
