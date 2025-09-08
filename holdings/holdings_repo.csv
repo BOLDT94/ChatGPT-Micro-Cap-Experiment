@@ -1,2 +1,4 @@
 Ticker,Antal,Inköpskurs,Stop-loss
-CASH,5000.0,1.0,
+CASH,5000,1.0,
+INTRUM.ST,0,0,
+EMBRAC-B.ST,0,0,
