@@ -1,0 +1,41 @@
+name: EOD (auto)
+
+on:
+  schedule:
+    - cron: '30 16 * * 1-5'   # 16:30 UTC ≈ 18:30 svensk tid (justera vid sommar/vintertid)
+  workflow_dispatch:
+
+env:
+  TZ: Europe/Stockholm
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -V
+          pip install -q --upgrade pip
+          pip install -q pandas yfinance requests numpy
+
+      - name: Run EOD
+        run: |
+          python scripts/eod_repo.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add eod/eod_log.csv
+          git diff --cached --quiet || git commit -m "EOD auto update"
+          git push
