@@ -138,16 +138,28 @@ def upsert_eod(eod_path: str, row: dict) -> pd.DataFrame:
         "benchmark_SEK","return_total_pct","return_vs_bm_pct",
         "notes"
     ]
-    if os.path.exists(eod_path):
-        eod = pd.read_csv(eod_path, parse_dates=["date"])
-        for c in cols:
-            if c not in eod.columns:
-                eod[c] = np.nan
-    else:
+
+    # --- Läs existerande logg robust ---
+    need_new = True
+    if os.path.exists(eod_path) and os.path.getsize(eod_path) > 0:
+        try:
+            eod = pd.read_csv(eod_path, parse_dates=["date"])
+            need_new = False
+        except Exception:
+            # korrupt eller tom: starta om
+            need_new = True
+
+    if need_new:
         os.makedirs(os.path.dirname(eod_path), exist_ok=True)
         eod = pd.DataFrame(columns=cols)
 
-    mask = (eod["date"].dt.date == row["date"])
+    # säkerställ kolumner
+    for c in cols:
+        if c not in eod.columns:
+            eod[c] = np.nan
+
+    # --- Upsert på datum ---
+    mask = (eod["date"].dt.date == row["date"]) if not eod.empty else pd.Series([], dtype=bool)
     if mask.any():
         idx = eod.index[mask][0]
         for k, v in row.items():
@@ -155,7 +167,7 @@ def upsert_eod(eod_path: str, row: dict) -> pd.DataFrame:
     else:
         eod = pd.concat([eod, pd.DataFrame([row])], ignore_index=True)
 
-    # Re-räkna Dag N och avkastning
+    # --- Dag-index, taggar & avkastning ---
     eod = eod.sort_values("date").reset_index(drop=True)
     if not eod.empty:
         base_date = eod["date"].iloc[0].date()
@@ -163,7 +175,7 @@ def upsert_eod(eod_path: str, row: dict) -> pd.DataFrame:
         eod["day_tag"] = eod.apply(lambda r: f"Dag {int(r['day_index'])} – {r['date'].date().isoformat()}", axis=1)
 
         base_port = float(eod["total_value_SEK"].iloc[0]) if pd.notna(eod["total_value_SEK"].iloc[0]) else np.nan
-        base_bm = eod["benchmark_SEK"].dropna().iloc[0] if eod["benchmark_SEK"].notna().any() else np.nan
+        base_bm   = eod["benchmark_SEK"].dropna().iloc[0] if eod["benchmark_SEK"].notna().any() else np.nan
 
         def pct(a,b):
             try:
@@ -177,8 +189,7 @@ def upsert_eod(eod_path: str, row: dict) -> pd.DataFrame:
         if not np.isnan(base_bm):
             eod["return_vs_bm_pct"] = eod.apply(
                 lambda r: (pct(r["total_value_SEK"], base_port) - pct(r["benchmark_SEK"], base_bm))
-                if pd.notna(r["benchmark_SEK"]) else np.nan,
-                axis=1
+                if pd.notna(r["benchmark_SEK"]) else np.nan, axis=1
             )
 
     eod.to_csv(eod_path, index=False)
