@@ -1,1 +1,2 @@
-
+date,day_index,day_tag,portfolio_name,cash_SEK,total_value_SEK,benchmark_SEK,return_total_pct,return_vs_bm_pct,notes
+2025-09-08,0,Dag 0 – 2025-09-08,AI Portfölj 1,5000.0,5000.0,1259.8504326530383,0.0,0.0,Auto (Actions) | Stop-loss triggar: 0
