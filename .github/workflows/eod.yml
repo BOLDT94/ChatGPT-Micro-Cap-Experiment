@@ -2,7 +2,10 @@ name: EOD (auto)
 
 on:
   schedule:
-    - cron: '30 16 * * 1-5'   # 16:30 UTC ≈ 18:30 svensk tid (justera vid sommar/vintertid)
+    - cron: '35 16 * * 1-5'   # 16:35 UTC ≈ 18:35 svensk tid (justera vid behov)
+  push:
+    paths:
+      - 'holdings/holdings_repo.csv'   # trigga när Drive->Repo sync pushar holdings
   workflow_dispatch:
 
 env:
@@ -26,15 +29,21 @@ jobs:
         run: |
           python -V
           pip install -q --upgrade pip
-          pip install -q pandas yfinance requests numpy
+          pip install -q pandas yfinance numpy requests
+
+      # (valfritt men rekommenderat) hämta dagens priser innan EOD
+      - name: Fetch latest prices
+        run: |
+          if [ -f scripts/fetch_prices.py ]; then
+            python scripts/fetch_prices.py || true
+          fi
 
       - name: Run EOD
-        run: |
-          python scripts/eod_repo.py
+        run: python scripts/eod_repo.py
 
-      - name: Commit & push if changed
+      - name: Commit & push EOD
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add eod/eod_log.csv
           git diff --cached --quiet || git commit -m "EOD auto update"
