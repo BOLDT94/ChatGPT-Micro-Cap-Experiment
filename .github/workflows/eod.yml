@@ -48,3 +48,18 @@ jobs:
           git add eod/eod_log.csv
           git diff --cached --quiet || git commit -m "EOD auto update"
           git push
+      - name: Run EOD
+        run: python scripts/eod_repo.py
+
+      - name: Run Watchlist EOD
+        run: |
+          mkdir -p eod/watchlist
+          python scripts/watchlist_repo.py
+
+      - name: Commit & push EOD + Watchlist
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add eod/eod_log.csv eod/watchlist/*
+          git diff --cached --quiet || git commit -m "EOD + Watchlist auto update"
+          git push
