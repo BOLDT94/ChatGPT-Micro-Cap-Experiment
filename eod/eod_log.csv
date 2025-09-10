@@ -3,3 +3,4 @@ date,day_index,day_tag,portfolio_name,cash_SEK,total_value_SEK,benchmark_SEK,ret
 2025-09-08,0,Dag 0 – 2025-09-08,AI Portfölj 1,5000.0,5000.0,1259.713290528627,0.0,0.010885587753650672,Auto (Actions) | Stop-loss triggar: 0
 2025-09-09,1,Dag 1 – 2025-09-09,AI Portfölj 1,5000.0,5000.0,1262.2293943716795,0.0,-0.1888289003982413,Auto (Actions) | Stop-loss triggar: 0
 2025-09-10,2,Dag 2 – 2025-09-10,AI Portfölj 1,5000.0,5000.0,1264.7630552710325,0.0,-0.3899369711410028,Auto (Actions) | Stop-loss triggar: 0
+2025-09-10,2,Dag 2 – 2025-09-10,AI Portfölj 1,5000.0,5000.0,1264.7630552710325,0.0,-0.3899369711410028,Auto (Actions) | Stop-loss triggar: 0
