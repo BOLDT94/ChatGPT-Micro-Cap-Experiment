@@ -1,0 +1,79 @@
+name: Weekly Report
+
+on:
+  schedule:
+    - cron: '45 16 * * 5'   # 16:45 UTC = 18:45 Stockholm (fre)
+  workflow_dispatch:
+
+env:
+  TZ: Europe/Stockholm
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -V
+          pip install -q --upgrade pip
+          pip install -q pandas "numpy>=1.26,<3" matplotlib
+
+      # (valfritt) hämta senaste priser och kör EOD/Watchlist först
+      # så att fredagens data säkert finns innan veckorapporten byggs.
+      - name: Try fetch daily prices (optional)
+        run: |
+          if [ -f scripts/fetch_prices.py ]; then
+            python scripts/fetch_prices.py || true
+          fi
+
+      - name: Build weekly report
+        run: python scripts/build_weekly_report.py
+
+      - name: Send weekly email
+        if: ${{ success() }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "AI Portfölj 1 – Veckorapport"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          secure: true
+          html_body: file://reports/weekly_report_${{ steps.weekid.outputs.tag }}.html
+          attachments: |
+            reports/weekly_chart_${{ steps.weekid.outputs.tag }}.png
+        env:
+          # för mail-body path måste vi veta veckotaggen
+          # vi skapar den i steget nedan
+          DUMMY: ok
+
+      - name: Compute week tag (YYYY-WW)
+        id: weekid
+        run: |
+          python - <<'PY'
+from datetime import date
+y,w,_=date.today().isocalendar()
+print(f"::set-output name=tag::{y}-{w:02d}")
+PY
+
+      - name: Upload artifacts (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report
+          path: |
+            reports/weekly_report_*.html
+            reports/weekly_chart_*.png
+            eod/eod_log.csv
+            eod/holdings/**
+            eod/watchlist/**
