@@ -2,7 +2,7 @@ name: EOD (auto)
 
 on:
   schedule:
-    # 18:40 Stockholm (16:40 UTC) varje vardag
+    # 18:40 Stockholm (16:40 UTC) mån–fre
     - cron: '40 16 * * 1-5'
   workflow_dispatch:
   push:
@@ -33,7 +33,7 @@ jobs:
           pip install -q --upgrade pip
           pip install -q "pandas==2.2.*" "numpy>=1.26,<3" "matplotlib==3.8.*" "yfinance>=0.2.40,<0.3" requests
 
-      # (valfritt) hämta färska prices in i data/daily (om du använder fetch_prices.py)
+      # (valfritt) hämta senaste priser om du använder fetch_prices.py
       - name: Fetch latest prices (optional)
         run: |
           if [ -f scripts/fetch_prices.py ]; then
@@ -50,19 +50,36 @@ jobs:
       - name: Run Watchlist EOD
         run: python scripts/watchlist_repo.py
 
+      # ✅ HELT FIXAT STEG – sätter TODAY & TODAY_TAG via $GITHUB_ENV
       - name: Set date env (for report filenames and subject)
-        run: |
-          echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
-          if [ -f eod/eod_log.csv ]; then
-            python - <<'PY' >> $GITHUB_OUTPUT
-import pandas as pd
-df=pd.read_csv("eod/eod_log.csv",parse_dates=["date"]).sort_values("date")
-tag = df.iloc[-1]["day_tag"] if not df.empty and "day_tag" in df.columns else ""
-print(f"today_tag={tag if tag else 'Dag – ' + pd.Timestamp.today().date().isoformat()}")
-PY
-            echo "TODAY_TAG=${{ steps.set_date_env.outputs.today_tag }}" >> $GITHUB_ENV || true
-          fi
         id: set_date_env
+        run: |
+          # Sätt dagens datum som YYYYMMDD för filnamn
+          echo "TODAY=$(date +'%Y%m%d')" >> "$GITHUB_ENV"
+
+          # Försök läsa day_tag från eod_log.csv; annars fallback
+          if [ -f eod/eod_log.csv ]; then
+            TAG=$(
+              python - <<'PY'
+import pandas as pd
+from datetime import date
+try:
+    df = pd.read_csv("eod/eod_log.csv", parse_dates=["date"]).sort_values("date")
+    tag = df.iloc[-1]["day_tag"] if not df.empty and "day_tag" in df.columns else ""
+    print(tag if isinstance(tag, str) else "")
+except Exception:
+    print("")
+PY
+            )
+          else
+            TAG=""
+          fi
+
+          if [ -z "$TAG" ]; then
+            TAG="Dag – $(date +'%Y-%m-%d')"
+          fi
+
+          echo "TODAY_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Build daily report (HTML + PNG)
         run: python scripts/build_daily_report.py
@@ -74,7 +91,7 @@ PY
           server_port: ${{ secrets.MAIL_PORT }}
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "AI Portfölj 1 – ${{ steps.set_date_env.outputs.today_tag }}"
+          subject: "AI Portfölj 1 – ${{ env.TODAY_TAG }}"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_FROM }}
           secure: true
@@ -90,7 +107,6 @@ PY
           git diff --cached --quiet || git commit -m "EOD + Watchlist + Report"
           git push
 
-      # Bra för felsökning — sparar utdata som artifact
       - name: Upload report artifacts (debug)
         if: always()
         uses: actions/upload-artifact@v4
