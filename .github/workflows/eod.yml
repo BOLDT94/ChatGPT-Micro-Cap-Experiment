@@ -2,25 +2,27 @@ name: EOD (auto)
 
 on:
   schedule:
-    - cron: '35 16 * * 1-5'   # 16:35 UTC ≈ 18:35 svensk tid (justera vid behov)
+    # 18:40 Stockholm (16:40 UTC) varje vardag
+    - cron: '40 16 * * 1-5'
+  workflow_dispatch:
   push:
     paths:
-      - 'holdings/holdings_repo.csv'   # trigga när Drive->Repo sync pushar holdings
-  workflow_dispatch:
+      - 'holdings/holdings_repo.csv'
+      - 'holdings/watchlist.csv'
 
 env:
   TZ: Europe/Stockholm
+  PYTHONUNBUFFERED: "1"
 
 jobs:
-  run:
+  eod:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -29,37 +31,74 @@ jobs:
         run: |
           python -V
           pip install -q --upgrade pip
-          pip install -q pandas yfinance numpy requests
+          pip install -q "pandas==2.2.*" "numpy>=1.26,<3" "matplotlib==3.8.*" "yfinance>=0.2.40,<0.3" requests
 
-      # (valfritt men rekommenderat) hämta dagens priser innan EOD
-      - name: Fetch latest prices
+      # (valfritt) hämta färska prices in i data/daily (om du använder fetch_prices.py)
+      - name: Fetch latest prices (optional)
         run: |
           if [ -f scripts/fetch_prices.py ]; then
             python scripts/fetch_prices.py || true
           fi
 
-      - name: Run EOD
-        run: python scripts/eod_repo.py
-
-      - name: Commit & push EOD
+      - name: Prepare folders
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add eod/eod_log.csv
-          git diff --cached --quiet || git commit -m "EOD auto update"
-          git push
+          mkdir -p eod eod/watchlist eod/holdings reports
+
       - name: Run EOD
         run: python scripts/eod_repo.py
 
       - name: Run Watchlist EOD
-        run: |
-          mkdir -p eod/watchlist
-          python scripts/watchlist_repo.py
+        run: python scripts/watchlist_repo.py
 
-      - name: Commit & push EOD + Watchlist
+      - name: Set date env (for report filenames and subject)
+        run: |
+          echo "TODAY=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          if [ -f eod/eod_log.csv ]; then
+            python - <<'PY' >> $GITHUB_OUTPUT
+import pandas as pd
+df=pd.read_csv("eod/eod_log.csv",parse_dates=["date"]).sort_values("date")
+tag = df.iloc[-1]["day_tag"] if not df.empty and "day_tag" in df.columns else ""
+print(f"today_tag={tag if tag else 'Dag – ' + pd.Timestamp.today().date().isoformat()}")
+PY
+            echo "TODAY_TAG=${{ steps.set_date_env.outputs.today_tag }}" >> $GITHUB_ENV || true
+          fi
+        id: set_date_env
+
+      - name: Build daily report (HTML + PNG)
+        run: python scripts/build_daily_report.py
+
+      - name: Send daily email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "AI Portfölj 1 – ${{ steps.set_date_env.outputs.today_tag }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          secure: true
+          html_body: file://reports/daily_report_${{ env.TODAY }}.html
+          attachments: |
+            reports/daily_chart_${{ env.TODAY }}.png
+
+      - name: Commit & push EOD + Watchlist + Report
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add eod/eod_log.csv eod/watchlist/*
-          git diff --cached --quiet || git commit -m "EOD + Watchlist auto update"
+          git add eod/eod_log.csv eod/watchlist/* eod/holdings/* reports/*
+          git diff --cached --quiet || git commit -m "EOD + Watchlist + Report"
           git push
+
+      # Bra för felsökning — sparar utdata som artifact
+      - name: Upload report artifacts (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eod-artifacts
+          path: |
+            eod/eod_log.csv
+            eod/watchlist/**
+            eod/holdings/**
+            reports/daily_report_*.html
+            reports/daily_chart_*.png
