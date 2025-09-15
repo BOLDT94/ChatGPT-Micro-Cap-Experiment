@@ -50,16 +50,16 @@ jobs:
       - name: Run Watchlist EOD
         run: python scripts/watchlist_repo.py
 
-      # ✅ HELT FIXAT STEG – sätter TODAY & TODAY_TAG via $GITHUB_ENV
-          - name: Set date env (for report filenames and subject)
-      id: set_date_env
-      run: |
-        # Sätt dagens datum som YYYYMMDD för filnamn
-        echo "TODAY=$(date +'%Y%m%d')" >> "$GITHUB_ENV"
+      # ✅ Sätter TODAY & TODAY_TAG via $GITHUB_ENV (korrekt heredoc & indentering)
+      - name: Set date env (for report filenames and subject)
+        id: set_date_env
+        run: |
+          # Sätt dagens datum som YYYYMMDD för filnamn
+          echo "TODAY=$(date +'%Y%m%d')" >> "$GITHUB_ENV"
 
-        # Försök läsa day_tag från eod_log.csv; annars fallback
-        if [ -f eod/eod_log.csv ]; then
-          TAG=$(python - <<'PY'
+          # Försök läsa day_tag från eod_log.csv; annars fallback
+          if [ -f eod/eod_log.csv ]; then
+            TAG=$(python - <<'PY'
 import pandas as pd
 try:
     df = pd.read_csv("eod/eod_log.csv", parse_dates=["date"]).sort_values("date")
@@ -72,34 +72,14 @@ except Exception:
     print("")
 PY
 )
-          if [ -n "$TAG" ]; then
-            echo "TODAY_TAG=$TAG" >> "$GITHUB_ENV"
+            if [ -n "$TAG" ]; then
+              echo "TODAY_TAG=$TAG" >> "$GITHUB_ENV"
+            else
+              echo "TODAY_TAG=Dag – $(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
+            fi
           else
-            echo "TODAY_TAG=Dag-$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
+            echo "TODAY_TAG=Dag – $(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
           fi
-        else
-          echo "TODAY_TAG=Dag-$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
-        fi
-
-import pandas as pd
-from datetime import date
-try:
-    df = pd.read_csv("eod/eod_log.csv", parse_dates=["date"]).sort_values("date")
-    tag = df.iloc[-1]["day_tag"] if not df.empty and "day_tag" in df.columns else ""
-    print(tag if isinstance(tag, str) else "")
-except Exception:
-    print("")
-PY
-            )
-          else
-            TAG=""
-          fi
-
-          if [ -z "$TAG" ]; then
-            TAG="Dag – $(date +'%Y-%m-%d')"
-          fi
-
-          echo "TODAY_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Build daily report (HTML + PNG)
         run: python scripts/build_daily_report.py
