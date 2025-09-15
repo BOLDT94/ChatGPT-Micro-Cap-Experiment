@@ -2,8 +2,7 @@ name: EOD (auto)
 
 on:
   schedule:
-    # 18:40 Stockholm (16:40 UTC) mån–fre
-    - cron: '40 16 * * 1-5'
+    - cron: '40 16 * * 1-5'   # 18:40 Stockholm
   workflow_dispatch:
   push:
     paths:
@@ -33,7 +32,6 @@ jobs:
           pip install -q --upgrade pip
           pip install -q "pandas==2.2.*" "numpy>=1.26,<3" "matplotlib==3.8.*" "yfinance>=0.2.40,<0.3" requests
 
-      # (valfritt) hämta senaste priser om du använder fetch_prices.py
       - name: Fetch latest prices (optional)
         run: |
           if [ -f scripts/fetch_prices.py ]; then
@@ -50,14 +48,10 @@ jobs:
       - name: Run Watchlist EOD
         run: python scripts/watchlist_repo.py
 
-      # ✅ Sätter TODAY & TODAY_TAG via $GITHUB_ENV (korrekt heredoc & indentering)
       - name: Set date env (for report filenames and subject)
         id: set_date_env
         run: |
-          # Sätt dagens datum som YYYYMMDD för filnamn
           echo "TODAY=$(date +'%Y%m%d')" >> "$GITHUB_ENV"
-
-          # Försök läsa day_tag från eod_log.csv; annars fallback
           if [ -f eod/eod_log.csv ]; then
             TAG=$(python - <<'PY'
 import pandas as pd
